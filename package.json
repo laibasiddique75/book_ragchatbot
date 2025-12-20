@@ -1,0 +1,29 @@
+{
+  "name": "physical-ai-humanoid-robotics-rag-chatbot",
+  "version": "1.0.0",
+  "description": "A RAG chatbot integrated with the Physical AI & Humanoid Robotics book",
+  "scripts": {
+    "install-backend": "cd backend && pip install -r requirements.txt",
+    "install-frontend": "cd frontend && npm install",
+    "start-backend": "cd backend && npm run dev",
+    "start-frontend": "cd frontend && npm start",
+    "start": "concurrently \"npm run start-backend\" \"npm run start-frontend\"",
+    "index-book": "cd backend && python index_book_content.py",
+    "build-frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "rag",
+    "chatbot",
+    "ai",
+    "nlp",
+    "qwen",
+    "openrouter",
+    "qdrant",
+    "docusaurus"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

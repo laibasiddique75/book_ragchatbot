@@ -1,0 +1,62 @@
+WARNING:vector_store:Could not connect to Qdrant: [WinError 10061] No connection could be made because the target machine actively refused it. Running in mock mode.
+WARNING:openrouter:OPENROUTER_API_KEY environment variable is not set. Some features may not work.
+INFO:     Started server process [13248]
+INFO:     Waiting for application startup.
+INFO:main:\U0001f680 Starting RAG Chatbot API...
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53186 - "OPTIONS /chat HTTP/1.1" 200 OK
+WARNING:vector_store:Qdrant not connected. Returning empty search results.
+INFO:rag:Retrieved 0 context documents
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+ERROR:openrouter:Error in OpenRouter chat completion: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:rag:Error generating response: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:rag:Error in RAG query: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:main:Chat endpoint failed
+Traceback (most recent call last):
+  File "C:\Users\pc\Desktop\hackathon-1\backend\main.py", line 309, in chat_endpoint
+    result = await rag_service.query(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\rag.py", line 126, in query
+    response = await self.generate_response(query, context_docs, selected_context)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\rag.py", line 92, in generate_response
+    completion_response = await openrouter_service.get_chat_completion(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\openrouter.py", line 61, in get_chat_completion
+    raise Exception(f"OpenRouter API error: {response.status_code} - {response.text}")
+Exception: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+INFO:     127.0.0.1:53186 - "POST /chat HTTP/1.1" 500 Internal Server Error
+WARNING:vector_store:Qdrant not connected. Returning empty search results.
+INFO:rag:Retrieved 0 context documents
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+ERROR:openrouter:Error in OpenRouter chat completion: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:rag:Error generating response: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:rag:Error in RAG query: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+ERROR:main:Chat endpoint failed
+Traceback (most recent call last):
+  File "C:\Users\pc\Desktop\hackathon-1\backend\main.py", line 309, in chat_endpoint
+    result = await rag_service.query(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\rag.py", line 126, in query
+    response = await self.generate_response(query, context_docs, selected_context)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\rag.py", line 92, in generate_response
+    completion_response = await openrouter_service.get_chat_completion(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\pc\Desktop\hackathon-1\backend\openrouter.py", line 61, in get_chat_completion
+    raise Exception(f"OpenRouter API error: {response.status_code} - {response.text}")
+Exception: OpenRouter API error: 401 - {"error":{"message":"No cookie auth credentials found","code":401}}
+INFO:     127.0.0.1:53188 - "POST /chat HTTP/1.1" 500 Internal Server Error

@@ -1,0 +1,14 @@
+{
+  "name": "rag-chatbot-backend",
+  "version": "1.0.0",
+  "description": "Backend for RAG chatbot integrated with Physical AI book",
+  "main": "index.js",
+  "scripts": {
+    "start": "python -m uvicorn main:app --host 0.0.0.0 --port 8000",
+    "dev": "python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "install": "pip install -r requirements.txt"
+  },
+  "keywords": ["rag", "chatbot", "openrouter", "qwen", "qdrant"],
+  "author": "",
+  "license": "ISC"
+}
