@@ -3,8 +3,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from vector_store import qdrant_service
-from gemini_service import gemini_service
+from openrouter import openrouter_service
 from database import SessionLocal, Document
+from translation_service import translation_service
 import os
 
 # Configure logging
@@ -119,8 +120,8 @@ class RAGService:
                 }
             ]
 
-            # Get response from Gemini
-            completion_response = await gemini_service.get_chat_completion(
+            # Get response from OpenRouter (as fallback to Gemini)
+            completion_response = await openrouter_service.get_chat_completion(
                 messages=messages,
                 temperature=0.3,  # Lower temperature for more consistent, fact-based responses
                 max_tokens=1024
@@ -135,9 +136,24 @@ class RAGService:
 
         except Exception as e:
             logger.error(f"Error generating response: {e}")
-            raise
+            # If there's an error generating the response, return a fallback response based on the context
+            if context_docs:
+                # If we have context but couldn't generate a response, return the most relevant context
+                top_doc = context_docs[0] if context_docs else None
+                fallback_response = f"Based on the book content, here's relevant information to your question '{query}':\n\n{top_doc['text'] if top_doc else 'No specific content found.'}\n\nNote: There was an issue processing your request with the AI model, so this is a direct extract from the book."
+                return RAGResponse(
+                    response=fallback_response,
+                    sources=context_docs,
+                    tokens_used=0
+                )
+            else:
+                return RAGResponse(
+                    response=f"Could not find relevant information in the book for your question: '{query}'. There was also an issue processing your request with the AI model.",
+                    sources=[],
+                    tokens_used=0
+                )
 
-    async def query(self, query: str, selected_context: Optional[str] = None) -> RAGResponse:
+    async def query(self, query: str, selected_context: Optional[str] = None, target_language: Optional[str] = "en") -> RAGResponse:
         """
         Main RAG query method - retrieves context and generates response
         """
@@ -155,6 +171,17 @@ class RAGService:
 
             # Generate response using the context
             response = await self.generate_response(query, context_docs, selected_context)
+
+            # Translate response if requested and it's not already in the target language
+            if target_language and target_language != "en":
+                logger.info(f"Translating response from English to {target_language}")
+                translated_response = await translation_service.translate(
+                    text=response.response,
+                    source_lang="en",
+                    target_lang=target_language
+                )
+                response.response = translated_response.translated_text
+                logger.info(f"Translation completed: {translated_response.translated_text[:100]}...")
 
             logger.info(f"RAG query completed successfully")
             return response

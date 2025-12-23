@@ -1,160 +1,103 @@
 import os
-import sys
+import requests
+import json
 from pathlib import Path
-import asyncio
-from typing import List, Dict, Any
 
-# Add the backend directory to the path so we can import our modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from database import SessionLocal, Document
-from vector_store import qdrant_service
-from main import chunk_document
-from datetime import datetime
-
-async def index_book_content():
+def index_book_content():
     """
-    Index the entire book content from the frontend documentation into the RAG system
+    Index the book content from frontend/docs directory to the backend
     """
-    print("Starting book content indexing...")
+    backend_url = "http://localhost:8000"
     
-    # Define the base path for the frontend docs
-    frontend_docs_path = Path("../frontend/docs")
+    # Check if backend is running
+    try:
+        response = requests.get(f"{backend_url}/health")
+        if response.status_code != 200:
+            print("Backend server might not be running. Please start the backend server first.")
+            print("Run: uvicorn main:app --reload")
+            return
+        print("Backend server is running...")
+    except requests.exceptions.ConnectionError:
+        print("Cannot connect to backend server. Please start the backend server first.")
+        print("Run: uvicorn main:app --reload")
+        return
     
-    if not frontend_docs_path.exists():
-        print(f"Frontend docs path does not exist: {frontend_docs_path}")
-        return False
+    # Get all markdown files from the docs directory
+    docs_path = Path("../frontend/docs")  # Relative to backend directory
     
-    # Get all markdown files in the docs directory and subdirectories
-    md_files = list(frontend_docs_path.rglob("*.md"))
+    if not docs_path.exists():
+        print(f"Docs directory not found at {docs_path}")
+        return
     
-    print(f"Found {len(md_files)} markdown files to process")
+    markdown_files = list(docs_path.rglob("*.md"))
     
-    for md_file in md_files:
+    if not markdown_files:
+        print("No markdown files found in docs directory")
+        return
+    
+    print(f"Found {len(markdown_files)} markdown files to index")
+    
+    for file_path in markdown_files:
         try:
-            print(f"Processing: {md_file}")
-            
-            # Read the file content
-            with open(md_file, 'r', encoding='utf-8') as f:
+            # Read the content of the markdown file
+            with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Extract metadata from the file (title, etc.)
-            title = extract_title_from_content(content)
-            section = md_file.parent.name  # Use the directory name as section
-            doc_id = str(md_file.relative_to(frontend_docs_path)).replace('/', '_').replace('\\', '_').replace('.md', '')
+            # Extract title from the file content (look for title in frontmatter or first heading)
+            title = file_path.stem.replace('_', ' ').title()  # Default to filename
             
-            # Remove frontmatter from content if present
-            processed_content = remove_frontmatter(content)
+            # Look for title in frontmatter (between ---)
+            lines = content.split('\n')
+            in_frontmatter = False
+            title_from_frontmatter = None
             
-            # Chunk the document
-            chunks = chunk_document(processed_content)
-            print(f"  - Created {len(chunks)} content chunks")
+            for line in lines:
+                if line.strip() == '---':
+                    if not in_frontmatter:
+                        in_frontmatter = True
+                    else:
+                        break  # End of frontmatter
+                elif in_frontmatter and line.startswith('title:'):
+                    title_from_frontmatter = line.split(':', 1)[1].strip().strip('"\'')
+                    break
+            else:
+                # If no frontmatter title found, look for first heading
+                for line in lines:
+                    if line.startswith('# '):
+                        title = line[2:].strip()
+                        break
             
-            # Store document metadata in the database
-            db = SessionLocal()
-            try:
-                # Check if document already exists
-                existing_doc = db.query(Document).filter(Document.doc_id == doc_id).first()
+            if title_from_frontmatter:
+                title = title_from_frontmatter
+            
+            # Create document ID from file path
+            doc_id = str(file_path.relative_to(docs_path)).replace(os.sep, '_').replace('.md', '')
+            doc_id = doc_id.replace('..', '').replace('__', '_').strip('_')
+            
+            # Prepare the request payload
+            payload = {
+                "content": content,
+                "doc_id": doc_id,
+                "doc_title": title,
+                "doc_section": str(file_path.parent.relative_to(docs_path)) if file_path.parent != docs_path else "main"
+            }
+            
+            print(f"Indexing: {doc_id} - {title}")
+            
+            # Send the request to the backend
+            response = requests.post(f"{backend_url}/index-document", json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"  ✓ Successfully indexed: {doc_id} - {result['chunks_processed']} chunks processed")
+            else:
+                print(f"  ✗ Failed to index {doc_id}: {response.status_code} - {response.text}")
                 
-                if existing_doc:
-                    print(f"  - Document {doc_id} already indexed, skipping")
-                    # We could update it instead if needed
-                else:
-                    # Create new document entry
-                    doc = Document(
-                        doc_id=doc_id,
-                        title=title,
-                        content=processed_content,
-                        section=section,
-                        is_indexed=True,
-                        created_at=datetime.utcnow()
-                    )
-                    db.add(doc)
-                    db.commit()
-                    print(f"  - Added document to database: {title}")
-            except Exception as e:
-                print(f"  - Error adding document to database: {e}")
-                db.rollback()
-            finally:
-                db.close()
-            
-            # Store embeddings in Qdrant
-            if chunks:
-                doc_ids = [doc_id] * len(chunks)
-                metadata_list = [{"section": section, "title": title} for _ in chunks]
-                
-                try:
-                    vector_ids = await qdrant_service.store_embeddings(chunks, doc_ids, metadata_list)
-                    print(f"  - Stored {len(vector_ids)} embeddings in vector store")
-                    
-                    # Update document record with embedding reference
-                    db = SessionLocal()
-                    try:
-                        doc = db.query(Document).filter(Document.doc_id == doc_id).first()
-                        if doc:
-                            doc.embedding_vector_id = ",".join(vector_ids)
-                            doc.updated_at = datetime.utcnow()
-                            db.commit()
-                            print(f"  - Updated document with vector IDs")
-                    except Exception as e:
-                        print(f"  - Error updating document with vector IDs: {e}")
-                        db.rollback()
-                    finally:
-                        db.close()
-                except Exception as e:
-                    print(f"  - Error storing embeddings in vector store: {e}")
-            
         except Exception as e:
-            print(f"Error processing file {md_file}: {e}")
-            continue
-    
-    print("Book content indexing completed!")
-    return True
+            print(f"  ✗ Error processing {file_path}: {e}")
 
-def extract_title_from_content(content: str) -> str:
-    """
-    Extract title from content, handling frontmatter if present
-    """
-    lines = content.split('\n')
-    
-    # Look for title in frontmatter first
-    if lines and lines[0].strip() == '---':
-        in_frontmatter = True
-        for line in lines[1:]:
-            if line.strip() == '---':
-                # End of frontmatter
-                break
-            if line.strip().startswith('title:'):
-                title = line.split('title:', 1)[1].strip().strip('"\'')
-                return title
-    
-    # If no title in frontmatter, look for first heading
-    for line in lines:
-        if line.strip().startswith('# '):
-            return line.strip('# ').strip()
-    
-    # If no title found, return generic title
-    return "Untitled Document"
-
-def remove_frontmatter(content: str) -> str:
-    """
-    Remove frontmatter from content if present
-    """
-    lines = content.split('\n')
-    
-    if len(lines) > 1 and lines[0].strip() == '---':
-        # Find the end of frontmatter
-        for i, line in enumerate(lines[1:], 1):
-            if line.strip() == '---':
-                # Return content after frontmatter
-                return '\n'.join(lines[i+1:])
-    
-    # If no frontmatter, return original content
-    return content
+    print("\nIndexing process completed!")
+    print("Now you can access the book content in both English and Urdu.")
 
 if __name__ == "__main__":
-    success = asyncio.run(index_book_content())
-    if success:
-        print("Successfully indexed book content!")
-    else:
-        print("Failed to index book content.")
+    index_book_content()

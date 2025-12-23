@@ -4,6 +4,10 @@ import httpx
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

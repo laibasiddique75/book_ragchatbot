@@ -9,6 +9,10 @@ import uuid
 from pydantic import BaseModel
 import os
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -184,25 +188,41 @@ class QdrantService:
             # Generate embedding for the query
             query_embedding = (await self.generate_embeddings([query]))[0]
 
-            # Search in Qdrant
-            search_results = self.client.search(
+            # Search in Qdrant - using the correct syntax for the search method
+            # In newer versions of Qdrant client, use query method
+            search_results = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=limit
             )
 
             # Format results
             results = []
-            for hit in search_results:
-                results.append({
-                    "text": hit.payload.get("text", ""),
-                    "doc_id": hit.payload.get("doc_id", ""),
-                    "score": hit.score,
-                    "metadata": {k: v for k, v in hit.payload.items()
-                                if k not in ["text", "doc_id"]}
-                })
+            for hit in search_results.points:
+                # Only include results with a meaningful score (to filter out irrelevant matches)
+                if hit.score > 0.05:  # Adjust threshold as needed
+                    results.append({
+                        "text": hit.payload.get("text", ""),
+                        "doc_id": hit.payload.get("doc_id", ""),
+                        "score": hit.score,
+                        "metadata": {k: v for k, v in hit.payload.items()
+                                    if k not in ["text", "doc_id"]}
+                    })
 
-            logger.info(f"Found {len(results)} similar documents for query")
+            logger.info(f"Found {len(results)} similar documents for query with scores > 0.05")
+
+            # If no results found with the threshold, try to return at least some results
+            if not results and search_results.points:
+                logger.info("No results above threshold, returning top results regardless of score")
+                for hit in search_results.points[:2]:  # Return top 2 results even if score is low
+                    results.append({
+                        "text": hit.payload.get("text", ""),
+                        "doc_id": hit.payload.get("doc_id", ""),
+                        "score": hit.score,
+                        "metadata": {k: v for k, v in hit.payload.items()
+                                    if k not in ["text", "doc_id"]}
+                    })
+
             return results
 
         except Exception as e:

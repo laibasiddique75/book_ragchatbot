@@ -236,9 +236,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 from database import SessionLocal, Document
 from rag import rag_service
 from vector_store import qdrant_service
+from translation_service import translation_service
 
 # ===================== LOGGING =====================
 logging.basicConfig(level=logging.INFO)
@@ -281,6 +286,7 @@ class ChatMessage(BaseModel):
     message: str
     chat_history: Optional[List[Dict[str, str]]] = []
     selected_text: Optional[str] = None
+    target_language: Optional[str] = "en"  # Default to English
 
 
 class ChatResponse(BaseModel):
@@ -299,6 +305,19 @@ class DocumentIndexRequest(BaseModel):
 class DocumentIndexResponse(BaseModel):
     success: bool
     chunks_processed: int
+
+
+class TranslationRequest(BaseModel):
+    text: str
+    source_lang: str = "en"
+    target_lang: str = "ur"
+
+
+class TranslationResponse(BaseModel):
+    translated_text: str
+    source_lang: str
+    target_lang: str
+    tokens_used: int
 
 # ===================== ROUTES =====================
 @app.get("/")
@@ -330,10 +349,11 @@ async def chat_endpoint(payload: ChatMessage):
     try:
         logger.info(f"Received query: {payload.message[:100]}{'...' if len(payload.message) > 100 else ''}")
 
-        # Pass the query to the RAG service
+        # Pass the query to the RAG service with target language
         result = await rag_service.query(
             query=payload.message,
-            selected_context=payload.selected_text
+            selected_context=payload.selected_text,
+            target_language=payload.target_language
         )
 
         logger.info(f"Generated response with {len(result.sources)} sources")
@@ -349,6 +369,33 @@ async def chat_endpoint(payload: ChatMessage):
         raise HTTPException(
             status_code=500,
             detail=f"Chat processing failed: {str(e)}"
+        )
+
+
+@app.post("/translate", response_model=TranslationResponse)
+async def translate_endpoint(request: TranslationRequest):
+    """
+    Translation endpoint to translate text between English and Urdu
+    """
+    try:
+        logger.info(f"Received translation request: {request.source_lang} -> {request.target_lang}")
+
+        # Use the translation service to translate the text
+        result = await translation_service.translate(
+            text=request.text,
+            source_lang=request.source_lang,
+            target_lang=request.target_lang
+        )
+
+        logger.info(f"Translation completed successfully")
+
+        return result
+
+    except Exception as e:
+        logger.exception("Translation endpoint failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Translation failed: {str(e)}"
         )
 
 
@@ -486,6 +533,170 @@ async def index_book():
     except Exception as e:
         logger.error(f"Error in index book endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================== AUTHENTICATION =====================
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+import jwt
+
+# JWT Configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+class UserRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    created_at: datetime
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+def hash_password(password: str) -> str:
+    """Hash a password using SHA-256 with salt"""
+    salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((password + salt).encode()).hexdigest()
+    return f"{salt}${hashed}"
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against its hash"""
+    salt, stored_hash = hashed.split('$')
+    return hashlib.sha256((password + salt).encode()).hexdigest() == stored_hash
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create a JWT access token"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+@app.post("/auth/register", response_model=AuthResponse)
+async def register_user(request: UserRegisterRequest):
+    """
+    Register a new user
+    """
+    try:
+        # Check if user already exists
+        db = SessionLocal()
+        existing_user = db.query(Document).filter(Document.doc_id == f"user_{request.email}").first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+
+        # Hash the password
+        hashed_password = hash_password(request.password)
+
+        # Create new user (for now, we'll use the Document table for simplicity)
+        # In a real implementation, you'd have a separate User table
+        new_user = Document(
+            doc_id=f"user_{request.email}",
+            title=request.name,
+            content=hashed_password,  # Storing password hash in content field temporarily
+            section="user",  # Marking as user entry
+            is_indexed=True
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": request.email}, expires_delta=access_token_expires
+        )
+
+        # Create user response
+        user_response = UserResponse(
+            id=new_user.id,
+            name=request.name,
+            email=request.email,
+            created_at=new_user.created_at
+        )
+
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Registration failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Registration failed"
+        )
+    finally:
+        db.close()
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+async def login_user(request: UserLoginRequest):
+    """
+    Login a user
+    """
+    try:
+        # Find user (using Document table temporarily)
+        db = SessionLocal()
+        user = db.query(Document).filter(Document.doc_id == f"user_{request.email}").first()
+
+        if not user or not verify_password(request.password, user.content):
+            raise HTTPException(status_code=400, detail="Invalid email or password")
+
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": request.email}, expires_delta=access_token_expires
+        )
+
+        # Create user response
+        user_response = UserResponse(
+            id=user.id,
+            name=user.title,
+            email=request.email,
+            created_at=user.created_at
+        )
+
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Login failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Login failed"
+        )
+    finally:
+        db.close()
 
 
 # ===================== UTIL =====================

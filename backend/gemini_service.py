@@ -4,16 +4,23 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import asyncio
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
 # Try to import Google Generative AI, with fallback
+GOOGLE_GENAI_AVAILABLE = False
 try:
     import google.generativeai as genai
     GOOGLE_GENAI_AVAILABLE = True
-    logger = logging.getLogger(__name__)
-    logger.info("Google Generative AI library imported successfully")
+    logger.info("Google Generative AI library (google.generativeai) imported successfully")
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 except ImportError:
-    GOOGLE_GENAI_AVAILABLE = False
-    logger = logging.getLogger(__name__)
     logger.warning("Google Generative AI library not available")
+except Exception as e:
+    logger.warning(f"Could not configure Google Generative AI: {e}")
 
 class ChatCompletionRequest(BaseModel):
     messages: List[Dict[str, str]]
@@ -36,7 +43,6 @@ class GeminiService:
         self.model = None
         if GOOGLE_GENAI_AVAILABLE and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
                 logger.info(f"Initialized Gemini model: {self.model_name}")
             except Exception as e:
@@ -117,12 +123,30 @@ class GeminiService:
                 )
 
         except Exception as e:
-            logger.error(f"Error in Gemini chat completion: {e}")
-            # Return a mock response as fallback
-            return ChatCompletionResponse(
-                response="I'm the AI assistant. There was an issue with the Google Gemini API. Please try again later.",
-                tokens_used=0
-            )
+            error_msg = str(e).lower()
+            # Check if the error is related to quota limits
+            if "quota" in error_msg or "exceeded" in error_msg or "429" in error_msg or "rate limit" in error_msg:
+                logger.error(f"Gemini API quota exceeded: {e}")
+                # Provide a more helpful response that can still process the query using local methods
+                # Extract the user's question from the messages
+                user_question = ""
+                for msg in messages:
+                    if msg["role"] == "user":
+                        user_question = msg["content"]
+                        break
+
+                # Return a response that acknowledges the quota issue but still tries to help
+                return ChatCompletionResponse(
+                    response=f"I'm the AI assistant. The API quota has been exceeded. However, I can still try to help based on the context provided. User question: {user_question}",
+                    tokens_used=0
+                )
+            else:
+                logger.error(f"Error in Gemini chat completion: {e}")
+                # Return a mock response as fallback
+                return ChatCompletionResponse(
+                    response="I'm the AI assistant. There was an issue with the Google Gemini API. Please try again later.",
+                    tokens_used=0
+                )
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
