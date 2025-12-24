@@ -177,7 +177,7 @@ const config = {
   tagline: 'Bridging the Digital Brain and the Physical Body',
   favicon: 'img/favicon.ico',
 
-  url: 'https://your-organization.github.io',
+  url: 'https://book-ragchatbot-nwww.vercel.app',
   baseUrl: '/',
 
   organizationName: 'your-organization',
@@ -296,6 +296,7 @@ const config = {
 
     markdown: {
       mermaid: true,
+      onBrokenMarkdownLinks: 'warn',
     },
   },
 
