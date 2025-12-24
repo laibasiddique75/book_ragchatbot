@@ -3,7 +3,7 @@ import { useThemeConfig } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 
-const BACKEND_URL = 'http://localhost:8000'; // Replace with your backend URL in production
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'; // Use environment variable for production
 
 const ChatBot = () => {
   const [messages, setMessages] = useState([]);
