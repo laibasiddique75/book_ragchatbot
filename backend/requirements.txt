@@ -11,6 +11,5 @@ aiofiles==24.1.0
 python-multipart==0.0.20
 httpx==0.28.1
 google-generativeai==0.8.4
-asyncpg==0.29.0
 tiktoken==0.8.0
 numpy==2.2.0
