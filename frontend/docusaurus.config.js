@@ -180,9 +180,6 @@ const config = {
   url: 'https://book-ragchatbot-nwww.vercel.app',
   baseUrl: '/',
 
-  organizationName: 'your-organization',
-  projectName: 'physical-ai-humanoid-robotics',
-
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 

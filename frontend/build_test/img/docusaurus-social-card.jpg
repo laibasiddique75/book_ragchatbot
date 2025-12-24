@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320">
+  <rect width="640" height="320" fill="#3daa4b"/>
+  <text x="320" y="180" font-family="Arial" font-size="48" fill="white" text-anchor="middle">Physical AI & Humanoid Robotics</text>
+  <text x="320" y="250" font-family="Arial" font-size="32" fill="white" text-anchor="middle">Social Card</text>
+</svg>

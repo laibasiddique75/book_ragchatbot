@@ -3,7 +3,13 @@ import { useThemeConfig } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'; // Use environment variable for production
+// Define backend URL based on environment
+// For Docusaurus, we check if we're in the browser and use a default value
+const BACKEND_URL = typeof window !== 'undefined'
+  ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:8000'  // Local development
+      : 'https://book-ragchatbot.onrender.com')  // Production
+  : 'http://localhost:8000';
 
 const ChatBot = () => {
   const [messages, setMessages] = useState([]);
