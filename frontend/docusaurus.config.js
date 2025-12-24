@@ -178,7 +178,7 @@ const config = {
   favicon: 'img/favicon.ico',
 
   url: 'https://your-organization.github.io',
-  baseUrl: '/physical-ai-humanoid-robotics/',
+  baseUrl: '/',
 
   organizationName: 'your-organization',
   projectName: 'physical-ai-humanoid-robotics',
