@@ -301,6 +301,21 @@ const config = {
     '@docusaurus/theme-mermaid',
     '@docusaurus/theme-live-codeblock',
   ],
+
+  // Enable environment variables to be passed to client
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            to: '/docs/introduction/why-physical-ai',
+            from: ['/docs/intro', '/docs/getting-started'],
+          },
+        ],
+      },
+    ],
+  ],
 };
 
 export default config;

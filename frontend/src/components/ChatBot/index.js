@@ -3,13 +3,10 @@ import { useThemeConfig } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 
-// Define backend URL based on environment
-// For Docusaurus, we check if we're in the browser and use a default value
+// Define backend URL - completely avoiding process.env in browser
 const BACKEND_URL = typeof window !== 'undefined'
-  ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:8000'  // Local development
-      : 'https://book-ragchatbot.onrender.com')  // Production
-  : 'http://localhost:8000';
+  ? (window.NEXT_PUBLIC_BACKEND_URL || 'https://book-ragchatbot.onrender.com')
+  : 'https://book-ragchatbot.onrender.com';
 
 const ChatBot = () => {
   const [messages, setMessages] = useState([]);
